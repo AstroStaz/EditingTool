@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ReverseEdit</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0a0a0f;
+      --surface:  #13131a;
+      --border:   #1e1e2e;
+      --accent:   #7c3aed;
+      --accent2:  #a78bfa;
+      --glow:     rgba(124, 58, 237, 0.35);
+      --text:     #e4e4f0;
+      --muted:    #6b6b80;
+      --success:  #22c55e;
+      --error:    #ef4444;
+      --mono:     'Space Mono', monospace;
+      --sans:     'Space Grotesk', sans-serif;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem 4rem;
+    }
+
+    /* ── HEADER ── */
+    header {
+      text-align: center;
+      margin-bottom: 3rem;
+    }
+
+    .wordmark {
+      font-family: var(--mono);
+      font-size: clamp(2rem, 6vw, 3.5rem);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      background: linear-gradient(135deg, #fff 30%, var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .wordmark span {
+      display: inline-block;
+      transform: scaleX(-1);
+      background: linear-gradient(135deg, var(--accent2), var(--accent));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .tagline {
+      margin-top: 0.5rem;
+      color: var(--muted);
+      font-size: 0.95rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    /* ── VISUALIZER ── */
+    .viz {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      justify-content: center;
+      margin: 1.5rem 0 2.5rem;
+    }
+
+    .viz-bar {
+      width: 3px;
+      border-radius: 999px;
+      background: var(--accent);
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+
+    .viz-bar:nth-child(1)  { height: 14px; animation-delay: 0s;    opacity: 0.4; }
+    .viz-bar:nth-child(2)  { height: 22px; animation-delay: 0.1s;  opacity: 0.5; }
+    .viz-bar:nth-child(3)  { height: 32px; animation-delay: 0.2s;  opacity: 0.7; }
+    .viz-bar:nth-child(4)  { height: 40px; animation-delay: 0.3s;  opacity: 0.9; }
+    .viz-bar:nth-child(5)  { height: 48px; animation-delay: 0.4s;  opacity: 1;   }
+    .viz-bar:nth-child(6)  { height: 40px; animation-delay: 0.3s;  opacity: 0.9; }
+    .viz-bar:nth-child(7)  { height: 32px; animation-delay: 0.2s;  opacity: 0.7; }
+    .viz-bar:nth-child(8)  { height: 22px; animation-delay: 0.1s;  opacity: 0.5; }
+    .viz-bar:nth-child(9)  { height: 14px; animation-delay: 0s;    opacity: 0.4; }
+
+    @keyframes pulse {
+      0%, 100% { transform: scaleY(1); }
+      50%       { transform: scaleY(0.4); }
+    }
+
+    /* ── CARD ── */
+    .card {
+      width: 100%;
+      max-width: 520px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 1.25rem;
+      padding: 2rem;
+    }
+
+    /* ── DROP ZONE ── */
+    .drop-zone {
+      border: 2px dashed var(--border);
+      border-radius: 0.875rem;
+      padding: 2.5rem 1.5rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+      position: relative;
+    }
+
+    .drop-zone:hover,
+    .drop-zone.drag-over {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 4px var(--glow);
+      background: rgba(124, 58, 237, 0.05);
+    }
+
+    .drop-zone input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+    }
+
+    .drop-icon {
+      font-size: 2.5rem;
+      margin-bottom: 0.75rem;
+      display: block;
+    }
+
+    .drop-label {
+      font-size: 1rem;
+      font-weight: 500;
+      color: var(--text);
+      margin-bottom: 0.35rem;
+    }
+
+    .drop-sub {
+      font-size: 0.8rem;
+      color: var(--muted);
+      font-family: var(--mono);
+    }
+
+    /* ── FILE CHOSEN ── */
+    .file-chosen {
+      display: none;
+      align-items: center;
+      gap: 0.75rem;
+      background: rgba(124, 58, 237, 0.08);
+      border: 1px solid var(--accent);
+      border-radius: 0.625rem;
+      padding: 0.75rem 1rem;
+      margin-top: 1rem;
+    }
+
+    .file-chosen.show { display: flex; }
+
+    .file-chosen .fname {
+      flex: 1;
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      color: var(--accent2);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .file-chosen .remove-btn {
+      background: none;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 1rem;
+      line-height: 1;
+      padding: 0 0.25rem;
+      transition: color 0.15s;
+    }
+
+    .file-chosen .remove-btn:hover { color: var(--error); }
+
+    /* ── PROGRESS ── */
+    .progress-wrap {
+      display: none;
+      margin-top: 1.25rem;
+    }
+
+    .progress-wrap.show { display: block; }
+
+    .progress-label {
+      font-size: 0.78rem;
+      font-family: var(--mono);
+      color: var(--muted);
+      margin-bottom: 0.5rem;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .progress-bar-track {
+      height: 4px;
+      background: var(--border);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      border-radius: 999px;
+      transition: width 0.3s ease;
+    }
+
+    /* ── BTN ── */
+    .btn {
+      width: 100%;
+      margin-top: 1.25rem;
+      padding: 0.9rem 1.5rem;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 0.75rem;
+      font-family: var(--sans);
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      letter-spacing: 0.02em;
+      transition: background 0.2s, box-shadow 0.2s, transform 0.1s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+
+    .btn:hover:not(:disabled) {
+      background: #6d28d9;
+      box-shadow: 0 0 20px var(--glow);
+    }
+
+    .btn:active:not(:disabled) { transform: scale(0.98); }
+
+    .btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    /* ── SPINNER ── */
+    .spinner {
+      width: 18px; height: 18px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: none;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── STATUS ── */
+    .status {
+      margin-top: 1rem;
+      padding: 0.75rem 1rem;
+      border-radius: 0.625rem;
+      font-size: 0.875rem;
+      font-family: var(--mono);
+      display: none;
+    }
+
+    .status.show { display: block; }
+    .status.error { background: rgba(239,68,68,0.1); border: 1px solid var(--error); color: var(--error); }
+    .status.success { background: rgba(34,197,94,0.1); border: 1px solid var(--success); color: var(--success); }
+
+    /* ── DOWNLOAD ── */
+    .download-wrap {
+      display: none;
+      margin-top: 1rem;
+    }
+
+    .download-wrap.show { display: block; }
+
+    .btn-dl {
+      width: 100%;
+      padding: 0.9rem 1.5rem;
+      background: transparent;
+      color: var(--success);
+      border: 1.5px solid var(--success);
+      border-radius: 0.75rem;
+      font-family: var(--sans);
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      letter-spacing: 0.02em;
+      transition: background 0.2s, box-shadow 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      text-decoration: none;
+    }
+
+    .btn-dl:hover {
+      background: rgba(34,197,94,0.08);
+      box-shadow: 0 0 16px rgba(34,197,94,0.2);
+    }
+
+    /* ── HOW IT WORKS ── */
+    .how {
+      width: 100%;
+      max-width: 520px;
+      margin-top: 2rem;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.75rem;
+    }
+
+    .how-step {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 0.875rem;
+      padding: 1rem 0.875rem;
+      text-align: center;
+    }
+
+    .how-step .num {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: var(--accent2);
+      letter-spacing: 0.1em;
+      margin-bottom: 0.4rem;
+    }
+
+    .how-step .step-icon { font-size: 1.5rem; margin-bottom: 0.35rem; }
+
+    .how-step .step-text {
+      font-size: 0.78rem;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    /* ── FOOTER ── */
+    footer {
+      margin-top: 3rem;
+      font-size: 0.75rem;
+      color: var(--muted);
+      font-family: var(--mono);
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="wordmark">reverse<span>edit</span></div>
+    <p class="tagline">Drop. Process. Post.</p>
+  </header>
+
+  <div class="viz">
+    <div class="viz-bar"></div>
+    <div class="viz-bar"></div>
+    <div class="viz-bar"></div>
+    <div class="viz-bar"></div>
+    <div class="viz-bar"></div>
+    <div class="viz-bar"></div>
+    <div class="viz-bar"></div>
+    <div class="viz-bar"></div>
+    <div class="viz-bar"></div>
+  </div>
+
+  <div class="card">
+
+    <div class="drop-zone" id="dropZone">
+      <input type="file" id="fileInput" accept="video/*" />
+      <span class="drop-icon">🎬</span>
+      <p class="drop-label">Drop your clip here</p>
+      <p class="drop-sub">MP4 · MOV · max 5 seconds</p>
+    </div>
+
+    <div class="file-chosen" id="fileChosen">
+      <span>🎞️</span>
+      <span class="fname" id="fileName"></span>
+      <button class="remove-btn" id="removeBtn" title="Remove">✕</button>
+    </div>
+
+    <div class="progress-wrap" id="progressWrap">
+      <div class="progress-label">
+        <span id="progressText">Processing...</span>
+        <span id="progressPct">0%</span>
+      </div>
+      <div class="progress-bar-track">
+        <div class="progress-bar-fill" id="progressFill"></div>
+      </div>
+    </div>
+
+    <div class="status" id="status"></div>
+
+    <button class="btn" id="processBtn" disabled>
+      <div class="spinner" id="spinner"></div>
+      <span id="btnText">▶ ◀ &nbsp;Make Reverse Edit</span>
+    </button>
+
+    <div class="download-wrap" id="downloadWrap">
+      <a class="btn-dl" id="downloadBtn" href="#" download="reverseedit_output.mp4">
+        ⬇ &nbsp;Download Your Edit
+      </a>
+    </div>
+
+  </div>
+
+  <div class="how">
+    <div class="how-step">
+      <div class="num">01</div>
+      <div class="step-icon">📱</div>
+      <div class="step-text">Drop a slowed clip (max 5 sec)</div>
+    </div>
+    <div class="how-step">
+      <div class="num">02</div>
+      <div class="step-icon">⚡</div>
+      <div class="step-text">We split & reverse at the midpoint</div>
+    </div>
+    <div class="how-step">
+      <div class="num">03</div>
+      <div class="step-icon">🎬</div>
+      <div class="step-text">Download & post your edit</div>
+    </div>
+  </div>
+
+  <footer>reverseedit &nbsp;·&nbsp; no account needed &nbsp;·&nbsp; clips deleted after processing</footer>
+
+<script>
+  // ── CONFIG ──
+  // Replace this with your Render backend URL after deploying
+  const API_URL = "https://YOUR-APP-NAME.onrender.com/process";
+
+  const dropZone    = document.getElementById("dropZone");
+  const fileInput   = document.getElementById("fileInput");
+  const fileChosen  = document.getElementById("fileChosen");
+  const fileName    = document.getElementById("fileName");
+  const removeBtn   = document.getElementById("removeBtn");
+  const processBtn  = document.getElementById("processBtn");
+  const btnText     = document.getElementById("btnText");
+  const spinner     = document.getElementById("spinner");
+  const statusEl    = document.getElementById("status");
+  const progressWrap = document.getElementById("progressWrap");
+  const progressFill = document.getElementById("progressFill");
+  const progressText = document.getElementById("progressText");
+  const progressPct  = document.getElementById("progressPct");
+  const downloadWrap = document.getElementById("downloadWrap");
+  const downloadBtn  = document.getElementById("downloadBtn");
+
+  let selectedFile = null;
+  let downloadURL  = null;
+
+  // ── DRAG & DROP ──
+  dropZone.addEventListener("dragover", e => {
+    e.preventDefault();
+    dropZone.classList.add("drag-over");
+  });
+
+  dropZone.addEventListener("dragleave", () => {
+    dropZone.classList.remove("drag-over");
+  });
+
+  dropZone.addEventListener("drop", e => {
+    e.preventDefault();
+    dropZone.classList.remove("drag-over");
+    const file = e.dataTransfer.files[0];
+    if (file) setFile(file);
+  });
+
+  fileInput.addEventListener("change", () => {
+    if (fileInput.files[0]) setFile(fileInput.files[0]);
+  });
+
+  function setFile(file) {
+    selectedFile = file;
+    fileName.textContent = file.name;
+    fileChosen.classList.add("show");
+    processBtn.disabled = false;
+    clearStatus();
+    hideDownload();
+  }
+
+  removeBtn.addEventListener("click", () => {
+    selectedFile = null;
+    fileInput.value = "";
+    fileChosen.classList.remove("show");
+    processBtn.disabled = true;
+    clearStatus();
+    hideDownload();
+  });
+
+  // ── PROCESS ──
+  processBtn.addEventListener("click", async () => {
+    if (!selectedFile) return;
+
+    setLoading(true);
+    clearStatus();
+    hideDownload();
+    showProgress(0, "Uploading clip...");
+
+    const formData = new FormData();
+    formData.append("clip", selectedFile);
+
+    try {
+      // Fake progress while waiting (server doesn't stream progress)
+      let pct = 0;
+      const fakeProgress = setInterval(() => {
+        if (pct < 85) {
+          pct += Math.random() * 8;
+          const stages = [
+            [0,  "Uploading clip..."],
+            [20, "Checking duration..."],
+            [35, "Splitting at midpoint..."],
+            [55, "Reversing second half..."],
+            [70, "Blending transition..."],
+            [80, "Finalising output..."],
+          ];
+          const label = [...stages].reverse().find(([t]) => pct >= t)?.[1] || "Processing...";
+          showProgress(Math.min(pct, 85), label);
+        }
+      }, 400);
+
+      const res = await fetch(API_URL, {
+        method: "POST",
+        body: formData,
+      });
+
+      clearInterval(fakeProgress);
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Something went wrong on the server.");
+      }
+
+      showProgress(100, "Done!");
+
+      const blob = await res.blob();
+      if (downloadURL) URL.revokeObjectURL(downloadURL);
+      downloadURL = URL.createObjectURL(blob);
+      downloadBtn.href = downloadURL;
+
+      showStatus("✅ Your reverse edit is ready!", "success");
+      showDownload();
+
+    } catch (err) {
+      showStatus("❌ " + err.message, "error");
+    } finally {
+      setLoading(false);
+      setTimeout(() => progressWrap.classList.remove("show"), 1500);
+    }
+  });
+
+  // ── HELPERS ──
+  function setLoading(on) {
+    processBtn.disabled = on;
+    spinner.style.display = on ? "block" : "none";
+    btnText.style.display = on ? "none" : "inline";
+  }
+
+  function showProgress(pct, label) {
+    progressWrap.classList.add("show");
+    progressFill.style.width = pct + "%";
+    progressText.textContent = label;
+    progressPct.textContent  = Math.round(pct) + "%";
+  }
+
+  function clearStatus() {
+    statusEl.className = "status";
+    statusEl.textContent = "";
+  }
+
+  function showStatus(msg, type) {
+    statusEl.className = `status show ${type}`;
+    statusEl.textContent = msg;
+  }
+
+  function showDownload() { downloadWrap.classList.add("show"); }
+  function hideDownload()  { downloadWrap.classList.remove("show"); }
+</script>
+</body>
+</html>

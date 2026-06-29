@@ -5,6 +5,11 @@ import tempfile
 import os
 import uuid
 
+# Auto-download FFmpeg binary (no apt-get needed)
+import imageio_ffmpeg
+FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
+FFPROBE = FFMPEG.replace("ffmpeg", "ffprobe")
+
 app = Flask(__name__)
 CORS(app)
 
@@ -15,7 +20,7 @@ UPLOAD_FOLDER = tempfile.gettempdir()
 def get_duration(filepath):
     """Get video duration using ffprobe."""
     result = subprocess.run([
-        "ffprobe", "-v", "error",
+        FFPROBE, "-v", "error",
         "-show_entries", "format=duration",
         "-of", "default=noprint_wrappers=1:nokey=1",
         filepath
@@ -41,7 +46,7 @@ def process_reverse_edit(input_path, output_path):
     try:
         # Step 1: Extract first half (forward)
         subprocess.run([
-            "ffmpeg", "-y",
+            FFMPEG, "-y",
             "-i", input_path,
             "-t", str(mid),
             "-vf", "setpts=PTS-STARTPTS",
@@ -52,7 +57,7 @@ def process_reverse_edit(input_path, output_path):
 
         # Step 2: Extract first half reversed
         subprocess.run([
-            "ffmpeg", "-y",
+            FFMPEG, "-y",
             "-i", input_path,
             "-t", str(mid),
             "-vf", "reverse,setpts=PTS-STARTPTS",
@@ -67,7 +72,7 @@ def process_reverse_edit(input_path, output_path):
         offset = max(0, fwd_dur - 0.08)
 
         subprocess.run([
-            "ffmpeg", "-y",
+            FFMPEG, "-y",
             "-i", tmp_forward,
             "-i", tmp_reverse,
             "-filter_complex",

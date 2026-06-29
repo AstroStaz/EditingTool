@@ -4,11 +4,11 @@ import subprocess
 import tempfile
 import os
 import uuid
+import re
 
 # Auto-download FFmpeg binary (no apt-get needed)
 import imageio_ffmpeg
 FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
-FFPROBE = FFMPEG.replace("ffmpeg", "ffprobe")
 
 app = Flask(__name__)
 CORS(app)
@@ -18,14 +18,16 @@ UPLOAD_FOLDER = tempfile.gettempdir()
 
 
 def get_duration(filepath):
-    """Get video duration using ffprobe."""
+    """Get video duration using ffmpeg stderr output."""
     result = subprocess.run([
-        FFPROBE, "-v", "error",
-        "-show_entries", "format=duration",
-        "-of", "default=noprint_wrappers=1:nokey=1",
-        filepath
+        FFMPEG, "-i", filepath
     ], capture_output=True, text=True)
-    return float(result.stdout.strip())
+    # Duration appears in stderr: "Duration: 00:00:04.23"
+    match = re.search(r"Duration:\s*(\d+):(\d+):(\d+\.?\d*)", result.stderr)
+    if not match:
+        raise ValueError("Could not determine video duration")
+    h, m, s = match.groups()
+    return int(h) * 3600 + int(m) * 60 + float(s)
 
 
 def process_reverse_edit(input_path, output_path):
@@ -41,16 +43,16 @@ def process_reverse_edit(input_path, output_path):
     uid = uuid.uuid4().hex
     tmp_forward = os.path.join(UPLOAD_FOLDER, f"fwd_{uid}.mp4")
     tmp_reverse = os.path.join(UPLOAD_FOLDER, f"rev_{uid}.mp4")
-    tmp_concat = os.path.join(UPLOAD_FOLDER, f"concat_{uid}.txt")
 
     try:
-        # Step 1: Extract first half (forward)
+        # Step 1: Extract first half (forward), re-encode to fix any weird encoding
         subprocess.run([
             FFMPEG, "-y",
             "-i", input_path,
             "-t", str(mid),
             "-vf", "setpts=PTS-STARTPTS",
             "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+            "-pix_fmt", "yuv420p",
             "-an",
             tmp_forward
         ], check=True, capture_output=True)
@@ -62,12 +64,12 @@ def process_reverse_edit(input_path, output_path):
             "-t", str(mid),
             "-vf", "reverse,setpts=PTS-STARTPTS",
             "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+            "-pix_fmt", "yuv420p",
             "-an",
             tmp_reverse
         ], check=True, capture_output=True)
 
         # Step 3: Crossfade blend between forward and reverse at midpoint
-        # Use xfade filter for smooth transition (0.08s blend at join)
         fwd_dur = get_duration(tmp_forward)
         offset = max(0, fwd_dur - 0.08)
 
@@ -79,12 +81,13 @@ def process_reverse_edit(input_path, output_path):
             f"[0:v][1:v]xfade=transition=fade:duration=0.08:offset={offset:.4f}[outv]",
             "-map", "[outv]",
             "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+            "-pix_fmt", "yuv420p",
             "-movflags", "+faststart",
             output_path
         ], check=True, capture_output=True)
 
     finally:
-        for f in [tmp_forward, tmp_reverse, tmp_concat]:
+        for f in [tmp_forward, tmp_reverse]:
             if os.path.exists(f):
                 os.remove(f)
 
@@ -104,7 +107,6 @@ def process():
     if file.filename == "":
         return jsonify({"error": "No file selected"}), 400
 
-    # Save uploaded file
     uid = uuid.uuid4().hex
     ext = os.path.splitext(file.filename)[1].lower() or ".mp4"
     input_path = os.path.join(UPLOAD_FOLDER, f"input_{uid}{ext}")
@@ -116,8 +118,8 @@ def process():
         # Check duration
         try:
             duration = get_duration(input_path)
-        except Exception:
-            return jsonify({"error": "Could not read video file. Make sure it's a valid video."}), 400
+        except Exception as e:
+            return jsonify({"error": f"Could not read video file: {str(e)}"}), 400
 
         if duration > MAX_DURATION:
             return jsonify({
@@ -138,7 +140,8 @@ def process():
         )
 
     except subprocess.CalledProcessError as e:
-        return jsonify({"error": "FFmpeg processing failed. Try a different clip format."}), 500
+        stderr = e.stderr.decode() if e.stderr else "unknown"
+        return jsonify({"error": f"FFmpeg failed: {stderr[-300:]}"}), 500
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500

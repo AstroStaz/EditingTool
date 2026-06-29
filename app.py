@@ -22,7 +22,6 @@ def get_duration(filepath):
     result = subprocess.run([
         FFMPEG, "-i", filepath
     ], capture_output=True, text=True)
-    # Duration appears in stderr: "Duration: 00:00:04.23"
     match = re.search(r"Duration:\s*(\d+):(\d+):(\d+\.?\d*)", result.stderr)
     if not match:
         raise ValueError("Could not determine video duration")
@@ -35,7 +34,7 @@ def process_reverse_edit(input_path, output_path):
     Create the reverse edit effect:
     - Clip plays forward to midpoint
     - Then smoothly reverses back to start
-    - Smooth blend at the midpoint using crossfade
+    - Auto-scales to 720p max to save memory on free tier
     """
     duration = get_duration(input_path)
     mid = duration / 2
@@ -44,32 +43,35 @@ def process_reverse_edit(input_path, output_path):
     tmp_forward = os.path.join(UPLOAD_FOLDER, f"fwd_{uid}.mp4")
     tmp_reverse = os.path.join(UPLOAD_FOLDER, f"rev_{uid}.mp4")
 
+    # Scale filter: downscale to 720p max, keep aspect ratio, ensure even dimensions
+    scale = "scale=1280:720:force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2"
+
     try:
-        # Step 1: Extract first half (forward), re-encode to fix any weird encoding
+        # Step 1: Extract first half (forward) scaled to 720p
         subprocess.run([
             FFMPEG, "-y",
             "-i", input_path,
             "-t", str(mid),
-            "-vf", "setpts=PTS-STARTPTS",
-            "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+            "-vf", f"{scale},setpts=PTS-STARTPTS",
+            "-c:v", "libx264", "-preset", "fast", "-crf", "22",
             "-pix_fmt", "yuv420p",
             "-an",
             tmp_forward
         ], check=True, capture_output=True)
 
-        # Step 2: Extract first half reversed
+        # Step 2: Extract first half reversed, scaled to 720p
         subprocess.run([
             FFMPEG, "-y",
             "-i", input_path,
             "-t", str(mid),
-            "-vf", "reverse,setpts=PTS-STARTPTS",
-            "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+            "-vf", f"reverse,{scale},setpts=PTS-STARTPTS",
+            "-c:v", "libx264", "-preset", "fast", "-crf", "22",
             "-pix_fmt", "yuv420p",
             "-an",
             tmp_reverse
         ], check=True, capture_output=True)
 
-        # Step 3: Crossfade blend between forward and reverse at midpoint
+        # Step 3: Crossfade blend at midpoint
         fwd_dur = get_duration(tmp_forward)
         offset = max(0, fwd_dur - 0.08)
 
@@ -80,7 +82,7 @@ def process_reverse_edit(input_path, output_path):
             "-filter_complex",
             f"[0:v][1:v]xfade=transition=fade:duration=0.08:offset={offset:.4f}[outv]",
             "-map", "[outv]",
-            "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+            "-c:v", "libx264", "-preset", "fast", "-crf", "22",
             "-pix_fmt", "yuv420p",
             "-movflags", "+faststart",
             output_path
